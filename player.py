@@ -14,7 +14,7 @@ CHALLENGE_PROMPT_TEMPLATE_PATH = "prompt/challenge_prompt_template.txt"
 REFLECT_PROMPT_TEMPLATE_PATH = "prompt/reflect_prompt_template.txt"
 
 class Player:
-    def __init__(self, name: str, model: str = DEFAULT_MODEL_NAME, base_url: str = DEFAULT_BASE_URL, api_key: str = DEFAULT_API_KEY):
+    def __init__(self, name: str, model: str = DEFAULT_MODEL_NAME, base_url: str = DEFAULT_BASE_URL, api_key: str = DEFAULT_API_KEY, reasoning_effort: float = 'low'):
         """初始化玩家
 
         Args:
@@ -32,7 +32,8 @@ class Player:
         self.llm_client = LLMClient(
             base_url=base_url,
             api_key=api_key,
-            model=model
+            model=model,
+            reasoning_effort=reasoning_effort
         )
 
     def _read_file(self, filepath: str) -> str:

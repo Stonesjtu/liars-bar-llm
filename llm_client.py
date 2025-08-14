@@ -1,13 +1,14 @@
 from openai import OpenAI
 
 class LLMClient:
-    def __init__(self, base_url: str, api_key: str, model: str):
+    def __init__(self, base_url: str, api_key: str, model: str, reasoning_effort: str = 'low'):
         """初始化LLM客户端"""
         self.client = OpenAI(
             api_key=api_key,
             base_url=base_url
         )
         self.model = model
+        self.reasoning_effort = reasoning_effort
 
     def chat(self, messages):
         """与LLM交互
@@ -24,7 +25,7 @@ class LLMClient:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                reasoning_effort='low',
+                reasoning_effort=self.reasoning_effort,
             )
             if response.choices:
                 message = response.choices[0].message
