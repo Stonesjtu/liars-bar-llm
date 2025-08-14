@@ -1,0 +1,7 @@
+player_configs:
+  - name: "gpt-oss-120b"
+    api_base_url: "http://14.103.241.208:28888/v1/"
+    model_name: "openai/gpt-oss-120b"
+  - name: "gpt-oss-20b"
+    api_base_url: "http://14.103.241.208:27777/v1/"
+    model_name: "openai/gpt-oss-20b"
