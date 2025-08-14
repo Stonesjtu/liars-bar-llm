@@ -3,7 +3,7 @@ import argparse
 from game import Game
 
 class MultiGameRunner:
-    def __init__(self, player_configs: List[Dict[str, str]], num_games: int = 10):
+    def __init__(self, player_configs: list[dict[str, str]], num_games: int = 10):
         """初始化多局游戏运行器
 
         Args:
@@ -51,4 +51,4 @@ if __name__ == '__main__':
 
     # 运行多次游戏
     runner = MultiGameRunner(player_configs, num_games=args.num_games)
-    runner.run()
+    runner.run_games()
