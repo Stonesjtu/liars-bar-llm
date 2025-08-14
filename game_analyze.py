@@ -151,10 +151,11 @@ def print_statistics(stats, win_rates, game_count, player_names):
                 else:
                     matchups = stats['matchups'][opponent][player]
                 
-                wins = stats['win_counts'][player][opponent]
-                win_rate = win_rates[player][opponent] * 100
-                
-                print(f"{player} vs {opponent:<10} {matchups:<10} {wins:<10} {win_rate:.1f}%")
+                if matchups > 0:
+                    wins = stats['win_counts'][player][opponent]
+                    win_rate = win_rates[player][opponent] * 100
+                    
+                    print(f"{player} vs {opponent:<10} {matchups:<10} {wins:<10} {win_rate:.1f}%")
 
 if __name__ == "__main__":
     folder_path = "game_records"  # 替换为实际的文件夹路径
