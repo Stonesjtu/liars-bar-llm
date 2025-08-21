@@ -1,4 +1,4 @@
-player_configs:
+player:
   # - name: "gpt-oss-120b"
   #   base_url: "http://14.103.241.208:28888/v1/"
   #   model: "openai/gpt-oss-120b"

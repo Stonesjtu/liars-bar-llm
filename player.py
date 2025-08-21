@@ -2,11 +2,13 @@ import random
 import json
 import re
 import logging
-from typing import List, Dict
-from llm_client import LLMClient, logger as llm_logger
+from typing import List, Dict, Optional, Tuple, Any
+from llm_client import LLMClient
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
+from rich.table import Table
+from rich.text import Text
 
 console = Console()
 
