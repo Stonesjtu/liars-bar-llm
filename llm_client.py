@@ -1,4 +1,16 @@
+import logging
+import datetime
 from openai import OpenAI
+
+# 配置日志
+log_filename = f"game_{datetime.datetime.now().strftime('%Y%m%d')}.log"
+logging.basicConfig(
+    filename=log_filename,
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    encoding='utf-8'
+)
+logger = logging.getLogger(__name__)
 
 class LLMClient:
     def __init__(self, base_url: str, api_key: str, model: str, reasoning_effort: str = 'low'):
@@ -21,7 +33,7 @@ class LLMClient:
             tuple: (content, reasoning_content)
         """
         try:
-            print(f"LLM请求: {messages}")
+            logger.info(f"LLM请求: {messages}")
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
@@ -31,11 +43,11 @@ class LLMClient:
                 message = response.choices[0].message
                 content = message.content if message.content else ""
                 reasoning_content = getattr(message, "reasoning_content", "")
-                print(f"LLM推理内容: {content}")
+                logger.info(f"LLM推理内容: {content}")
                 return content, reasoning_content
 
             return "", ""
 
         except Exception as e:
-            print(f"LLM调用出错: {str(e)}")
+            logger.error(f"LLM调用出错: {str(e)}")
             return "", ""

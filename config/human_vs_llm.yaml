@@ -1,0 +1,7 @@
+player_configs:
+  - name: "gpt-oss-20b-low"
+    base_url: "http://14.103.241.208:27777/v1/"
+    model: "openai/gpt-oss-20b"
+    reasoning_effort: "low"
+  - name: "Human"
+    type: "human"

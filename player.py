@@ -1,8 +1,16 @@
 import random
 import json
 import re
+import logging
 from typing import List, Dict
-from llm_client import LLMClient
+from llm_client import LLMClient, logger as llm_logger
+from rich.console import Console
+from rich.panel import Panel
+from rich.prompt import Prompt
+
+console = Console()
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "http://14.103.241.208:28888/v1/"
 DEFAULT_API_KEY = "YOUR_API_KEY"
@@ -14,13 +22,8 @@ CHALLENGE_PROMPT_TEMPLATE_PATH = "prompt/challenge_prompt_template.txt"
 REFLECT_PROMPT_TEMPLATE_PATH = "prompt/reflect_prompt_template.txt"
 
 class Player:
-    def __init__(self, name: str, model: str = DEFAULT_MODEL_NAME, base_url: str = DEFAULT_BASE_URL, api_key: str = DEFAULT_API_KEY, reasoning_effort: float = 'low'):
-        """初始化玩家
-
-        Args:
-            name: 玩家名称
-            model_name: 使用的LLM模型名称
-        """
+    def __init__(self, name: str, **kwargs):
+        """初始化玩家基类"""
         self.name = name
         self.hand = []
         self.alive = True
@@ -28,7 +31,41 @@ class Player:
         self.current_bullet_position = 0
         self.opinions = {}
 
-        # LLM相关初始化
+    def print_status(self) -> None:
+        """打印玩家状态"""
+        print(f"{self.name} - 手牌: {', '.join(self.hand)} - "
+              f"子弹位置: {self.bullet_position} - 当前弹舱位置: {self.current_bullet_position}")
+
+    def init_opinions(self, other_players: List["Player"]) -> None:
+        """初始化对其他玩家的看法"""
+        self.opinions = {
+            player.name: "还不了解这个玩家"
+            for player in other_players
+            if player.name != self.name
+        }
+
+    def choose_cards_to_play(self, round_base_info: str, round_action_info: str, play_decision_info: str) -> Dict:
+        raise NotImplementedError
+
+    def decide_challenge(self, round_base_info: str, round_action_info: str, challenge_decision_info: str, challenging_player_performance: str, extra_hint: str) -> bool:
+        raise NotImplementedError
+
+    def reflect(self, alive_players: List[str], round_base_info: str, round_action_info: str, round_result: str) -> None:
+        pass
+
+    def process_penalty(self) -> bool:
+        """处理射击惩罚，返回玩家是否存活"""
+        if self.current_bullet_position == self.bullet_position:
+            self.alive = False
+            print(f"{self.name} 中弹身亡！")
+        else:
+            print(f"{self.name} 幸运地躲过一劫！")
+        self.current_bullet_position = (self.current_bullet_position + 1) % 6
+        return self.alive
+
+class LLMPlayer(Player):
+    def __init__(self, name: str, model: str = DEFAULT_MODEL_NAME, base_url: str = DEFAULT_BASE_URL, api_key: str = DEFAULT_API_KEY, reasoning_effort: str = 'low', **kwargs):
+        super().__init__(name, **kwargs)
         self.llm_client = LLMClient(
             base_url=base_url,
             api_key=api_key,
@@ -42,25 +79,8 @@ class Player:
             with open(filepath, 'r', encoding='utf-8') as f:
                 return f.read().strip()
         except Exception as e:
-            print(f"读取文件 {filepath} 失败: {str(e)}")
+            logger.error(f"读取文件 {filepath} 失败: {str(e)}")
             return ""
-
-    def print_status(self) -> None:
-        """打印玩家状态"""
-        print(f"{self.name} - 手牌: {', '.join(self.hand)} - "
-              f"子弹位置: {self.bullet_position} - 当前弹舱位置: {self.current_bullet_position}")
-
-    def init_opinions(self, other_players: List["Player"]) -> None:
-        """初始化对其他玩家的看法
-
-        Args:
-            other_players: 其他玩家列表
-        """
-        self.opinions = {
-            player.name: "还不了解这个玩家"
-            for player in other_players
-            if player.name != self.name
-        }
 
     def choose_cards_to_play(self,
                         round_base_info: str,
@@ -130,7 +150,7 @@ class Player:
 
             except Exception as e:
                 # 仅记录错误，不修改重试请求
-                print(f"尝试 {attempt+1} 解析失败: {str(e)}")
+                logger.warning(f"尝试 {attempt+1} 解析失败: {str(e)}")
         raise RuntimeError(f"玩家 {self.name} 的choose_cards_to_play方法在多次尝试后失败")
 
     def decide_challenge(self,
@@ -196,7 +216,7 @@ class Player:
 
             except Exception as e:
                 # 仅记录错误，不修改重试请求
-                print(f"尝试 {attempt+1} 解析失败: {str(e)}")
+                logger.warning(f"尝试 {attempt+1} 解析失败: {str(e)}")
         raise RuntimeError(f"玩家 {self.name} 的decide_challenge方法在多次尝试后失败")
 
     def reflect(self, alive_players: List[str], round_base_info: str, round_action_info: str, round_result: str) -> None:
@@ -245,19 +265,75 @@ class Player:
 
                 # 更新对该玩家的印象
                 self.opinions[player_name] = content.strip()
-                print(f"{self.name} 更新了对 {player_name} 的印象")
+                logger.info(f"{self.name} 更新了对 {player_name} 的印象")
 
             except Exception as e:
-                print(f"反思玩家 {player_name} 时出错: {str(e)}")
+                logger.error(f"反思玩家 {player_name} 时出错: {str(e)}")
 
-    def process_penalty(self) -> bool:
-        """处理惩罚"""
-        print(f"玩家 {self.name} 执行射击惩罚：")
-        self.print_status()
-        if self.bullet_position == self.current_bullet_position:
-            print(f"{self.name} 中枪死亡！")
-            self.alive = False
-        else:
-            print(f"{self.name} 幸免于难！")
-        self.current_bullet_position = (self.current_bullet_position + 1) % 6
-        return self.alive
+
+
+class HumanPlayer(Player):
+    def __init__(self, name: str, **kwargs):
+        super().__init__(name, **kwargs)
+
+    def choose_cards_to_play(self, round_base_info: str, round_action_info: str, play_decision_info: str) -> Dict:
+        console.print(Panel(round_base_info, title="轮次信息", border_style="green"))
+        console.print(Panel(round_action_info, title="本轮操作", border_style="yellow"))
+        
+        status_panel = Panel(f"手牌: {', '.join(self.hand)}\n子弹位置: {self.bullet_position} | 当前弹舱: {self.current_bullet_position}", title=f"{self.name} 的回合", border_style="cyan")
+        console.print(status_panel)
+
+        while True:
+            try:
+                cards_str = Prompt.ask("请输入你要出的牌 (用逗号分隔, 例如: Q,Joker)")
+                played_cards = [card.strip() for card in cards_str.split(',')]
+                
+                if not (1 <= len(played_cards) <= 3):
+                    console.print("[bold red]你必须出1到3张牌。[/bold red]")
+                    continue
+                
+                hand_copy = self.hand[:]
+                valid_play = True
+                for card in played_cards:
+                    if card in hand_copy:
+                        hand_copy.remove(card)
+                    else:
+                        valid_play = False
+                        break
+                
+                if not valid_play:
+                    console.print("[bold red]你出的牌必须是你手上的牌。[/bold red]")
+                    continue
+
+                for card in played_cards:
+                    self.hand.remove(card)
+                
+                return {
+                    "played_cards": played_cards,
+                    "behavior": "常规出牌",
+                    "play_reason": "玩家决策"
+                }, "Human Input"
+            except Exception as e:
+                logger.warning(f"输入无效，请重试: {e}")
+                console.print(f"[bold red]输入无效，请重试。[/bold red]")
+
+    def decide_challenge(self, round_base_info: str, round_action_info: str, challenge_decision_info: str, challenging_player_performance: str, extra_hint: str) -> bool:
+        console.print(Panel(round_base_info, title="轮次信息", border_style="green"))
+        console.print(Panel(round_action_info, title="本轮操作", border_style="yellow"))
+        console.print(Panel(challenge_decision_info, title="质疑阶段", border_style="red"))
+        
+        status_panel = Panel(f"手牌: {', '.join(self.hand)}\n子弹位置: {self.bullet_position} | 当前弹舱: {self.current_bullet_position}", title=f"{self.name} 的回合", border_style="cyan")
+        console.print(status_panel)
+
+        if extra_hint:
+            console.print(Panel(f"[bold magenta]提示: {extra_hint}[/bold magenta]"))
+
+        while True:
+            choice = Prompt.ask("你是否要质疑?", choices=["yes", "no"], default="no")
+            if choice == 'yes':
+                return {"was_challenged": True, "challenge_reason": "玩家决策"}, "Human Input"
+            elif choice == 'no':
+                return {"was_challenged": False, "challenge_reason": "玩家决策"}, "Human Input"
+
+    def reflect(self, alive_players: List[str], round_base_info: str, round_action_info: str, round_result: str) -> None:
+        pass

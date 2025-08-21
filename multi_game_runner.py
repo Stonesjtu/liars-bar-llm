@@ -9,7 +9,7 @@ def run_single_game(game_info):
     game_num, player_configs = game_info
     print(f"\n=== 开始第 {game_num} 局游戏 ===")
     game = Game(player_configs)
-    game.start_game()
+    game.play()
     print(f"第 {game_num} 局游戏结束")
     return game.game_record
 
@@ -27,12 +27,21 @@ class MultiGameRunner:
         self.max_parallel_requests = max_parallel_requests
 
     def run(self) -> None:
-        """并行运行指定数量的游戏"""
-        with multiprocessing.Pool(processes=self.max_parallel_requests) as pool:
-            game_infos = [(i + 1, self.player_configs) for i in range(self.num_games)]
-            results = list(tqdm(pool.imap(run_single_game, game_infos), total=self.num_games, desc="运行游戏"))
-        # 在这里可以处理 results，例如保存游戏记录等
-        print(f"\n所有 {self.num_games} 局游戏已完成。")
+        """运行指定数量的游戏"""
+        # 检查是否有HumanPlayer
+        is_human_game = any(p.get('type') == 'human' for p in self.player_configs)
+
+        if is_human_game:
+            if self.num_games > 1:
+                print("警告: 与HumanPlayer对战时，仅支持单局游戏。将只运行一局。")
+            run_single_game((1, self.player_configs))
+        else:
+            """并行运行指定数量的游戏"""
+            with multiprocessing.Pool(processes=self.max_parallel_requests) as pool:
+                game_infos = [(i + 1, self.player_configs) for i in range(self.num_games)]
+                results = list(tqdm(pool.imap(run_single_game, game_infos), total=self.num_games, desc="运行游戏"))
+            # 在这里可以处理 results，例如保存游戏记录等
+            print(f"\n所有 {self.num_games} 局游戏已完成。")
 
 def parse_arguments():
     """解析命令行参数"""

@@ -1,9 +1,16 @@
 import random
 import yaml
 import argparse
+import logging
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
 from typing import List, Optional, Dict
-from player import Player
+from player import LLMPlayer, HumanPlayer, Player
 from game_record import GameRecord, PlayerInitialState
+
+logger = logging.getLogger(__name__)
+console = Console()
 
 class Game:
     def __init__(self, player_configs: List[Dict[str, str]]) -> None:
@@ -13,7 +20,13 @@ class Game:
             player_configs: 包含玩家配置的列表，每个配置是一个字典。
         """
         # 使用配置创建玩家对象
-        self.players = [Player(**config) for config in player_configs]
+        self.players = []
+        for config in player_configs:
+            player_type = config.pop('type', 'llm') # 默认为llm
+            if player_type == 'human':
+                self.players.append(HumanPlayer(**config))
+            else:
+                self.players.append(LLMPlayer(**config))
 
         # 初始化每个玩家对其他玩家的看法
         for player in self.players:
@@ -47,12 +60,12 @@ class Game:
             for player in self.players:
                 if player.alive and self.deck:
                     player.hand.append(self.deck.pop())
-                    player.print_status()
+                    logger.info(f"{player.name}'s hand: {player.hand}")
 
     def choose_target_card(self) -> None:
         """随机选择目标牌"""
         self.target_card = random.choice(['Q', 'K', 'A'])
-        print(f"目标牌是: {self.target_card}")
+        logger.info(f"目标牌是: {self.target_card}")
 
     def start_round_record(self) -> None:
         """开始新的回合，并在 `GameRecord` 里记录信息"""
@@ -110,7 +123,7 @@ class Game:
         Args:
             player: 需要执行惩罚的玩家
         """
-        print(f"玩家 {player.name} 开枪！")
+        logger.info(f"玩家 {player.name} 开枪！")
 
         # 执行射击并获取存活状态
         still_alive = player.process_penalty()
@@ -123,7 +136,7 @@ class Game:
         )
 
         if not still_alive:
-            print(f"{player.name} 已死亡！")
+            logger.warning(f"{player.name} 已死亡！")
 
         # 检查胜利条件
         if not self.check_victory():
@@ -131,7 +144,7 @@ class Game:
 
     def reset_round(self, record_shooter: bool) -> None:
         """重置当前小局"""
-        print("小局游戏重置，开始新的一局！")
+        logger.info("小局游戏重置，开始新的一局！")
 
         # 在发新牌之前进行反思，并获取存活玩家列表
         alive_players = self.handle_reflection()
@@ -146,14 +159,14 @@ class Game:
             if shooter_idx is not None and self.players[shooter_idx].alive:
                 self.current_player_idx = shooter_idx
             else:
-                print(f"{self.last_shooter_name} 已死亡，顺延至下一个存活且有手牌的玩家")
+                logger.warning(f"{self.last_shooter_name} 已死亡，顺延至下一个存活且有手牌的玩家")
                 self.current_player_idx = self.find_next_player_with_cards(shooter_idx or 0)
         else:
             self.last_shooter_name = None
             self.current_player_idx = self.players.index(random.choice(alive_players))
 
         self.start_round_record()
-        print(f"从 {self.players[self.current_player_idx].name} 开始新的一轮！")
+        logger.info(f"从 {self.players[self.current_player_idx].name} 开始新的一轮！")
 
     def check_victory(self) -> bool:
         """
@@ -165,10 +178,12 @@ class Game:
         alive_players = [p for p in self.players if p.alive]
         if len(alive_players) == 1:
             winner = alive_players[0]
+            logger.info(f"\n{winner.name} 获胜！")
             print(f"\n{winner.name} 获胜！")
             # 记录胜利者并保存游戏记录
             self.game_record.finish_game(winner.name)
             self.game_over = True
+            console.print(Panel(f"[bold green]{winner.name} 获胜！[/bold green]", title="游戏结束", expand=False))
             return True
         return False
 
@@ -206,6 +221,8 @@ class Game:
             round_action_info,
             play_decision_info
         )
+
+        console.print(Panel(f"[cyan]{current_player.name}[/cyan] 打出了 [bold]{len(play_result['played_cards'])}[/bold] 张牌。", expand=False))
 
         # 记录出牌行为
         self.game_record.record_play(
@@ -259,6 +276,7 @@ class Game:
 
         # 如果选择质疑
         if challenge_result["was_challenged"]:
+            console.print(Panel(f"[bold yellow]{next_player.name} 决定质疑！[/bold yellow]\n理由: {challenge_result['challenge_reason']}", title="[red]质疑[/red]", expand=False))
             # 验证出牌是否合法
             is_valid = self.is_valid_play(played_cards)
 
@@ -273,6 +291,7 @@ class Game:
             # 根据验证结果返回需要受罚的玩家
             return next_player if is_valid else current_player
         else:
+            console.print(Panel(f"[green]{next_player.name} 选择不质疑。[/green]", expand=False))
             # 记录未质疑的情况
             self.game_record.record_challenge(
                 was_challenged=False,
@@ -290,7 +309,7 @@ class Game:
         Args:
             current_player: 当前玩家（最后一个有手牌的玩家）
         """
-        print(f"系统自动质疑 {current_player.name} 的手牌！")
+        logger.info(f"系统自动质疑 {current_player.name} 的手牌！")
 
         # 记录玩家自动出牌
         all_cards = current_player.hand.copy()  # 复制当前手牌以供记录
@@ -319,7 +338,7 @@ class Game:
         )
 
         if is_valid:
-            print(f"系统质疑失败！{current_player.name} 的手牌符合规则。")
+            logger.info(f"系统质疑失败！{current_player.name} 的手牌符合规则。")
             # 记录一个特殊的射击结果（无人射击）
             self.game_record.record_shooting(
                 shooter_name="无",
@@ -327,7 +346,7 @@ class Game:
             )
             self.reset_round(record_shooter=False)
         else:
-            print(f"系统质疑成功！{current_player.name} 的手牌违规，将执行射击惩罚。")
+            logger.warning(f"系统质疑成功！{current_player.name} 的手牌违规，将执行射击惩罚。")
             self.perform_penalty(current_player)
 
     def handle_reflection(self) -> None:
@@ -363,13 +382,20 @@ class Game:
         """执行一轮游戏逻辑"""
         current_player = self.players[self.current_player_idx]
 
-         # 当其他所有存活玩家都没有手牌时，系统自动对当前玩家进行质疑
+        # 当其他所有存活玩家都没有手牌时，系统自动对当前玩家进行质疑
         if self.check_other_players_no_cards(current_player):
             self.handle_system_challenge(current_player)
             return
 
-        print(f"\n轮到 {current_player.name} 出牌, 目标牌是 {self.target_card}")
-        current_player.print_status()
+        table = Table(title=f"第 {self.round_count} 轮 - {current_player.name} 的回合")
+        table.add_column("玩家", justify="center", style="cyan")
+        table.add_column("手牌数", justify="center", style="magenta")
+        table.add_column("子弹位置", justify="center", style="yellow")
+        for p in self.players:
+            if p.alive:
+                table.add_row(p.name, str(len(p.hand)), str(p.bullet_position))
+        console.print(table)
+        console.print(Panel(f"目标牌是 [bold red]{self.target_card}[/bold red]", expand=False))
 
         # 找到下一位有手牌的玩家
         next_idx = self.find_next_player_with_cards(self.current_player_idx)
@@ -385,7 +411,7 @@ class Game:
                 self.perform_penalty(player_to_penalize)
                 return
             else:
-                print(f"{next_player.name} 选择不质疑，游戏继续。")
+                logger.info(f"{next_player.name} 选择不质疑，游戏继续。")
 
         # 切换至下一玩家
         self.current_player_idx = next_idx
@@ -417,10 +443,17 @@ if __name__ == '__main__':
         config_data = yaml.safe_load(f)
     player_configs = config_data['player_configs']
 
-    print("游戏开始！玩家配置如下：")
+    console.print(Panel("[bold green]游戏开始！[/bold green]", expand=False))
+    table = Table(title="玩家配置")
+    table.add_column("玩家", style="cyan")
+    table.add_column("模型/类型", style="magenta")
     for config in player_configs:
-        print(f"玩家：{config['name']}, 使用模型：{config.get('model_name') or config.get('model')}")
-    print("-" * 50)
+        player_type = config.get('type', 'llm')
+        if player_type == 'human':
+            table.add_row(config['name'], "人类玩家")
+        else:
+            table.add_row(config['name'], config.get('model_name') or config.get('model'))
+    console.print(table)
 
     # 创建游戏实例并开始游戏
     game = Game(player_configs)
